@@ -1,0 +1,72 @@
+{
+  "name": "rediseed",
+  "version": "1.0.0",
+  "description": "Blazing-fast Redis data seeder & loader from CSV, JSON, and line streams for k6 load testing, staging fixtures, and queue populating.",
+  "keywords": [
+    "redis",
+    "k6",
+    "load-testing",
+    "seeder",
+    "csv-to-redis",
+    "json-to-redis",
+    "xk6-redis",
+    "fixtures",
+    "performance-testing",
+    "cli"
+  ],
+  "author": "authoritydmc",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/authoritydmc/rediseed.git"
+  },
+  "bugs": {
+    "url": "https://github.com/authoritydmc/rediseed/issues"
+  },
+  "homepage": "https://github.com/authoritydmc/rediseed#readme",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "rediseed": "./dist/cli.js",
+    "seedx": "./dist/cli.js",
+    "redisx": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "tsx --test src/test/rediseed.test.ts",
+    "lint": "eslint src/ --ext .ts",
+    "prepublishOnly": "npm run build && npm test",
+    "release:patch": "npm version patch && git push origin main --follow-tags",
+    "release:minor": "npm version minor && git push origin main --follow-tags",
+    "release:major": "npm version major && git push origin main --follow-tags"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "csv-parse": "^5.5.6",
+    "ioredis": "^5.4.1",
+    "picocolors": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsup": "^8.2.4",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
