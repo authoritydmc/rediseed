@@ -1,14 +1,16 @@
 # ⚡ rediseed (`seedx` / `redisx`)
 
 > **Blazing-fast Redis data seeder & loader from CSV, JSON, and line streams.**  
-> Built for k6 performance testing, unique token popping (`SPOP`), queue fixture populating, and instant Redis inspection.
+> Built for k6 load testing, unique token popping (`SPOP`), queue fixture populating, and instant Redis inspection.
 
+[![CI](https://github.com/authoritydmc/rediseed/actions/workflows/ci.yml/badge.svg)](https://github.com/authoritydmc/rediseed/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/rediseed.svg?style=flat-square&color=cb3837)](https://www.npmjs.com/package/rediseed)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18-green.svg)](https://nodejs.org)
 
 ---
 
-## 🚀 Key Features
+## ⚡ Highlights
 
 - 🏎️ **High Throughput**: Pipelined batch insertion processing 100k+ records/sec.
 - 🎯 **Load-Testing Ready (k6 / Locust / JMeter)**: Pre-seed test users, auth tokens, or session IDs into Redis Sets for collision-free `SPOP` or `SRANDMEMBER` consumption.
@@ -41,46 +43,89 @@ npm install -g rediseed
 
 ---
 
-## ⚡ Quick Usage Examples
+## 🛠️ Real-World Use Cases & Expected Outputs
 
-### 1. 🎯 Load Test User Tokens into a Redis Set (for k6 `SPOP`)
+### Use Case 1: k6 Load Test — Pre-Seeding 50,000 Unique User Tokens (Set / SPOP)
+**Problem**: In high-load performance tests (e.g. 5,000 virtual users), tests fail with 409 Conflict if multiple virtual users use the same user token simultaneously.  
+**Solution**: Seed tokens into a Redis Set, allowing k6 to atomically pop unique tokens via `client.spop()`.
 
-Given a `users.csv` file:
+Given `test_users.csv`:
 ```csv
-id,username,token
-1,alice,tok_live_948172
-2,bob,tok_live_109283
-3,charlie,tok_live_771920
+id,email,auth_token
+1,user1@test.com,tok_live_948172
+2,user2@test.com,tok_live_109283
+3,user3@test.com,tok_live_771920
 ```
 
-Load all tokens into a Redis set `k6:auth_tokens`:
+Seed command:
 ```bash
-# Using the shortcut set command
-seedx set k6:auth_tokens users.csv --column token --flush
+seedx set k6:auth_tokens test_users.csv --column auth_token --flush
+```
 
-# Or with custom Redis URL
-seedx set k6:auth_tokens users.csv --column token --url redis://:password@10.0.0.1:6379/0
+**Expected Output**:
+```text
+✔ Successfully loaded 50,000 unique items into Redis Set: k6:auth_tokens (312ms)
 ```
 
 ---
 
-### 2. 🧩 Seed Hash Records with Dynamic Key Templating
+### Use Case 2: Populating Worker Queue Fixtures (FIFO Lists)
+**Problem**: QA engineers need to simulate a backlog of 10,000 incoming orders for background worker load testing.  
+**Solution**: Seed JSON payloads into a Redis List using `structure list`.
 
-Seed each row as an individual Redis Hash keyed by user ID:
+Given `orders.jsonl`:
+```json
+{"order_id": "ORD-101", "sku": "ITEM_A", "amount": 49.99}
+{"order_id": "ORD-102", "sku": "ITEM_B", "amount": 12.50}
+```
+
+Seed command:
 ```bash
-seedx seed users.csv --structure hash --key "app:users:{{id}}" --flush
+seedx seed orders.jsonl --structure list --key "queue:orders" --flush
+```
+
+**Expected Output**:
+```text
+🌱 rediseed — Loading data from: orders.jsonl
+  • Parsed 10,000 records.
+
+✔ Seeding completed successfully!
+  • Structure: LIST
+  • Target Key: queue:orders
+  • Total Items: 10,000
+  • Speed: 142,857 ops/sec (70ms)
 ```
 
 ---
 
-### 3. 🔍 Inspect Seeded Redis Keys
+### Use Case 3: Ingesting Microservice Entities as Redis Hashes
+**Problem**: Pre-populate Redis cache with mock customer profiles for API integration tests.  
+**Solution**: Ingest full CSV rows as Redis Hashes using dynamic key templating `--key "user:{{id}}"`.
 
-Verify the count, data type, memory footprint, and preview sample items:
+```bash
+seedx seed customers.csv --structure hash --key "customer:{{id}}" --ttl 3600 --flush
+```
+
+**Expected Output**:
+```text
+✔ Seeding completed successfully!
+  • Structure: HASH
+  • Target Key: customer:{{id}}
+  • Total Items: 25,000
+  • Speed: 88,420 ops/sec (282ms)
+```
+
+---
+
+### Use Case 4: Inspecting Key Count, Memory & Sample Items
+**Problem**: Developers need to verify what was seeded in Redis without opening heavy GUI clients.  
+**Solution**: Run `seedx inspect <key>`.
+
 ```bash
 seedx inspect k6:auth_tokens
 ```
 
-Output:
+**Expected Output**:
 ```text
 🔍 Redis Key Inspector
   • Key: k6:auth_tokens
@@ -93,18 +138,21 @@ Sample Items:
   • tok_live_948172
   • tok_live_109283
   • tok_live_771920
+  • tok_live_339182
+  • tok_live_882910
 ```
 
 ---
 
-### 4. 📝 Generate k6 Load Test Script
+### Use Case 5: Instant k6 Load Test Script Generation
+**Problem**: Writing boilerplate connection code and `spop` logic for `xk6-redis`.  
+**Solution**: Run `seedx k6 <key>` to generate copy-paste ready k6 scripts.
 
-Generate a ready-to-run k6 test script consuming the seeded tokens via `xk6-redis`:
 ```bash
 seedx k6 k6:auth_tokens --structure set
 ```
 
-Output:
+**Expected Output**:
 ```javascript
 import http from 'k6/http';
 import { check, sleep } from 'k6';
@@ -122,22 +170,27 @@ export default function () {
   const uniqueToken = client.spop('k6:auth_tokens');
 
   if (!uniqueToken) {
-    console.warn('Tokens exhausted!');
+    console.warn('Redis set "k6:auth_tokens" is exhausted!');
     return;
   }
 
-  const res = http.get('https://api.example.com/v1/profile', {
-    headers: { Authorization: `Bearer ${uniqueToken}` },
+  const res = http.get('https://api.example.com/v1/user/profile', {
+    headers: {
+      Authorization: `Bearer ${uniqueToken}`,
+    },
   });
 
-  check(res, { 'status is 200': (r) => r.status === 200 });
+  check(res, {
+    'status is 200': (r) => r.status === 200,
+  });
+
   sleep(0.1);
 }
 ```
 
 ---
 
-## 🛠️ CLI Options Reference
+## ⚙️ CLI Options Reference
 
 ```text
 Usage: rediseed [options] [command]
@@ -160,6 +213,6 @@ Commands:
 
 ---
 
-## 🛡️ License
+## 📄 License
 
-MIT © [authoritydmc](https://github.com/authoritydmc)
+MIT © 2026 authoritydmc
